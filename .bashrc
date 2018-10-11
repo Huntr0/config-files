@@ -28,14 +28,6 @@ get_user_color() {
     esac
 }
 
-get_exit_status_color() {
-    if [ "$?" -eq 0 ]; then
-        printf "$GREEN"
-    else
-        printf "$RED"
-    fi
-}
-
 char_to_int() {
     printf '%d' "'$1"
 }
@@ -62,4 +54,4 @@ if [ -f /usr/share/git/completion/git-prompt.sh ]; then
     branch='$(__git_ps1 " (%s)")'
 fi
 
-PS1="$(get_user_color)\u\[$DEFAULT\]@$(word_to_color $(hostname))\h\[$DEFAULT\]:\[$YELLOW\]\w\[$CYAN\]$branch\[\$(get_exit_status_color)\]\n\\$ \[$DEFAULT\]"
+PS1="$(get_user_color)\u\[$DEFAULT\]@$(word_to_color $(hostname))\h\[$DEFAULT\]:\[$YELLOW\]\w\[$CYAN\]$branch\[\033[1;\$((32-(\$?&&1)))m\]\n\\$ \[$DEFAULT\]"
