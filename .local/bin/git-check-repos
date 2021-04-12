@@ -19,7 +19,7 @@ STATUS_WORKTREE_CHANGES='w'
 is_piped=0
 
 usage () {
-    echo 'usage: git check-repos [(-a|-A)|-c|-f|-h|-u|-v] [<path>]'
+    echo 'usage: git check-repos [(-a|-A)|-c|-f|-h|-r|-u|-v] [<path>]'
     echo
     echo 'Search for Git repositories within the given path. Is no path'
     echo "provided then the current directory is searched."
@@ -30,6 +30,9 @@ usage () {
     echo
     echo 'Is the configuration variable "checkrepos.skip" set in a found'
     echo 'repository then it will be ignored.'
+    echo
+    echo 'Searching for Git repositories can be a pretty slow task. For this'
+    echo 'reason found repositories are cached.'
     echo
     echo 'The paths of the found repositories are prefixed by two status fields'
     echo 'in the output.'
@@ -53,6 +56,7 @@ usage () {
     echo ' -c  enforce colorization of output'
     echo ' -f  fetch from remote of each repository'
     echo ' -h  show this help message'
+    echo ' -r  refresh cache'
     echo ' -u  try to update the repositories (fast-forward only)'
     echo ' -v  show additional information (e.g. current branch)'
 }
@@ -70,10 +74,62 @@ to_upper () {
     echo "$1" | tr '[a-z]' '[A-Z]'
 }
 
-list_git_repo_paths () {
+print_path () {
+    printf '%s\n' "$1"
+}
+
+begins_with () {
+    test "$(printf '%s\n' "$1" | cut -c 1-"${#2}")" = "$2"
+}
+
+append_to_cache_file () {
+    # TODO: Add path to file even if no repo was found
+    #printf '%s\n' "$2" >>"$1"
+
     # Does a directory contain a .git/ directory then do not traverse it any
     # further
-    find -L "$1" -type d -exec test -d {}/.git \; -prune -print
+    find -L "$2" -type d -exec test -d {}/.git \; -prune -print |
+    while read -r repo_path
+    do
+        # Add found $repo_path as well as its parent directories to the cache
+        # file. When parsing we can simply check if the path is present. If so,
+        # we can be sure that the whole directory was already searched.
+        printf '%s\n' "$repo_path/.git"
+        while [ "$repo_path" != "$2" ]
+        do
+            dirname "$repo_path"
+            repo_path="$(dirname "$repo_path")"
+        done
+    done | sort -u >>"$1"
+}
+
+parse_cache_file () {
+    grep -F "$2" "$1" | grep '.git$' |
+    while read -r repo_path
+    do
+        # `grep -F` just check if the path is within a line. It's possible that
+        # the path matches...
+        if begins_with "$repo_path" "$path"
+        then
+            dirname "$(printf '%s\n' "$repo_path")"
+        fi
+    done
+}
+
+list_git_repo_paths () {
+    # TODO: Use XDG Directory Layout
+    local cache_file="$HOME/.cache/git-check-repos/cached_repos"
+    local path="$(realpath "$1")"
+
+    mkdir -p "$(dirname "$cache_file")"
+
+    # Write to cache if file is missing or $path is not present
+    if [ ! -f "$cache_file" ] || ! grep -Fxq "$path" "$cache_file"
+    then
+        append_to_cache_file "$cache_file" "$path"
+    fi
+
+    parse_cache_file "$cache_file" "$path"
 }
 
 get_status_upstream_branch () {
